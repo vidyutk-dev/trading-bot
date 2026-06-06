@@ -86,6 +86,7 @@ def run_bot():
     clock = api.get_clock()
     if not clock.is_open:
         print("Market is closed — nothing to do.")
+        send_telegram("🕐 <b>Bot checked in</b>\nMarket is currently closed.\nWill trade automatically when market opens Mon-Fri 2:30pm-9pm UK time.")
         return
 
     # ── Account snapshot ─────────────────────────────────────────────────────
