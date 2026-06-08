@@ -2,15 +2,8 @@ name: Trading Bot
 
 on:
   workflow_dispatch:
-
   schedule:
-    # Every 15 mins during US market hours (Mon-Fri)
-    # 9:30 AM - 4:00 PM ET = 13:30 - 20:00 UTC (summer)
-
-    - cron: '30,45 13 * * 1-5'
-    - cron: '0,15,30,45 14-19 * * 1-5'
-    - cron: '0 20 * * 1-5'
-
+    - cron: '*/15 13-20 * * 1-5'
 
 jobs:
   run-bot:
