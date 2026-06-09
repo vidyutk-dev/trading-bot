@@ -134,8 +134,8 @@ def get_signals(symbol: str) -> dict | None:
             "ma20":   round(float(ma20.iloc[-1]), 2),
             "ma50":   round(float(ma50.iloc[-1]), 2),
         }
-        latest["buy"]  = latest["rsi"] < 35 and latest["ma20"] > latest["ma50"]
-        latest["sell"] = latest["rsi"] > 65 or  latest["ma20"] < latest["ma50"]
+        latest["buy"]  = latest["rsi"] < 40 and latest["ma20"] > latest["ma50"]
+        latest["sell"] = latest["rsi"] > 60 or  latest["ma20"] < latest["ma50"]
         return latest
     except Exception as e:
         print(f"Signal error for {symbol}: {e}")
