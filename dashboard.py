@@ -253,8 +253,8 @@ def trigger():
     Only fires the GitHub workflow during market hours (Mon-Fri 13:30-20:00 UTC).
     Protected by TRIGGER_SECRET query param.
     """
-    # Secret check — UptimeRobot passes ?secret=YOUR_SECRET in the URL
-    if TRIGGER_SECRET and request.args.get("secret") != TRIGGER_SECRET:
+    # Secret check — UptimeRobot passes X-Trigger-Secret header
+    if TRIGGER_SECRET and request.headers.get("X-Trigger-Secret") != TRIGGER_SECRET:
         return jsonify({"status": "unauthorized"}), 401
 
     now = datetime.now(timezone.utc)
