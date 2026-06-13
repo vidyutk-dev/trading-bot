@@ -1,12 +1,15 @@
 import os
 import requests
-from flask import Flask, render_template_string
-from datetime import datetime
+from flask import Flask, render_template_string, request, jsonify
+from datetime import datetime, timezone
 
 app = Flask(__name__)
 
-SUPABASE_URL = os.environ["SUPABASE_URL"]
-SUPABASE_KEY = os.environ["SUPABASE_KEY"]
+SUPABASE_URL    = os.environ["SUPABASE_URL"]
+SUPABASE_KEY    = os.environ["SUPABASE_KEY"]
+WORKFLOW_TOKEN  = os.environ.get("WORKFLOW_TOKEN", "")
+GITHUB_REPO     = os.environ.get("GITHUB_REPOSITORY", "vidyutk-dev/trading-bot")
+TRIGGER_SECRET  = os.environ.get("TRIGGER_SECRET", "")
 
 HEADERS = {
     "apikey": SUPABASE_KEY,
@@ -94,7 +97,7 @@ HTML = """
     </div>
     <div class="card">
       <div class="label">Open Positions</div>
-      <div class="value">{{ open_positions }} / 3</div>
+      <div class="value">{{ open_positions }} / 5</div>
     </div>
     <div class="card">
       <div class="label">Total Trades</div>
@@ -123,7 +126,7 @@ HTML = """
           <th>Shares</th>
           <th>Price</th>
           <th>Value</th>
-          <th>RSI</th>
+          <th>Score</th>
         </tr>
       </thead>
       <tbody>
@@ -135,7 +138,7 @@ HTML = """
           <td>{{ t.quantity }}</td>
           <td>${{ t.price }}</td>
           <td>${{ t.value }}</td>
-          <td>{{ t.rsi }}</td>
+          <td>{{ t.score }}</td>
         </tr>
         {% endfor %}
       </tbody>
@@ -207,8 +210,18 @@ def index():
 
     # Recent trades
     raw_trades = db_get("trades", "order=created_at.desc&limit=30")
+
+    total_trades = len(raw_trades)
     trades = []
     for t in raw_trades:
+        # Score is stored in risk_level field as "medium|score:78"
+        risk_raw = t.get("risk_level", "")
+        score = "—"
+        if "score:" in risk_raw:
+            try:
+                score = risk_raw.split("score:")[1].split("|")[0]
+            except:
+                score = "—"
         trades.append({
             "time":     t["created_at"][5:16].replace("T", " "),
             "symbol":   t.get("symbol", ""),
@@ -216,10 +229,8 @@ def index():
             "quantity": t.get("quantity", 0),
             "price":    f"{float(t.get('price', 0)):.2f}",
             "value":    f"{float(t.get('value', 0)):,.2f}",
-            "rsi":      f"{float(t.get('rsi', 0)):.1f}" if t.get('rsi') else "—",
+            "score":    score,
         })
-
-    total_trades = db_get("trades", "select=id")[0] if False else len(raw_trades)
 
     return render_template_string(HTML,
         portfolio_value=portfolio_value,
@@ -227,12 +238,65 @@ def index():
         daily_pnl_raw=daily_pnl_raw,
         cash=cash_val,
         open_positions=open_positions,
-        total_trades=len(raw_trades),
+        total_trades=total_trades,
         trades=trades,
         chart_labels=str(chart_labels),
         chart_values=str(chart_values),
         updated=datetime.utcnow().strftime("%d %b %Y, %H:%M UTC")
     )
+
+
+@app.route("/trigger")
+def trigger():
+    """
+    Called by UptimeRobot every 5 minutes.
+    Only fires the GitHub workflow during market hours (Mon-Fri 13:30-20:00 UTC).
+    Protected by TRIGGER_SECRET query param.
+    """
+    # Secret check — UptimeRobot passes ?secret=YOUR_SECRET in the URL
+    if TRIGGER_SECRET and request.args.get("secret") != TRIGGER_SECRET:
+        return jsonify({"status": "unauthorized"}), 401
+
+    now = datetime.now(timezone.utc)
+    is_weekday     = now.weekday() < 5
+    market_open    = now.replace(hour=13, minute=30, second=0, microsecond=0)
+    market_close   = now.replace(hour=20, minute=0,  second=0, microsecond=0)
+    is_market_hours = market_open <= now <= market_close
+
+    if not is_weekday or not is_market_hours:
+        return jsonify({
+            "status":  "skipped",
+            "reason":  "outside market hours",
+            "time_utc": now.strftime("%H:%M UTC"),
+            "weekday": now.weekday()
+        })
+
+    if not WORKFLOW_TOKEN:
+        return jsonify({"status": "error", "reason": "no WORKFLOW_TOKEN configured"}), 500
+
+    try:
+        r = requests.post(
+            f"https://api.github.com/repos/{GITHUB_REPO}/actions/workflows/trading_bot.yml/dispatches",
+            headers={
+                "Authorization": f"Bearer {WORKFLOW_TOKEN}",
+                "Accept":        "application/vnd.github.v3+json",
+                "Content-Type":  "application/json"
+            },
+            json={"ref": "main"},
+            timeout=15
+        )
+        if r.status_code == 204:
+            return jsonify({"status": "triggered", "time_utc": now.strftime("%H:%M UTC")})
+        else:
+            return jsonify({"status": "github_error", "code": r.status_code, "body": r.text}), 500
+    except Exception as e:
+        return jsonify({"status": "error", "reason": str(e)}), 500
+
+
+@app.route("/health")
+def health():
+    """Simple health check so Render and UptimeRobot know the service is alive."""
+    return jsonify({"status": "ok", "time_utc": datetime.utcnow().strftime("%H:%M UTC")})
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
