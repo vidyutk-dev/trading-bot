@@ -3,4 +3,4 @@ requests==2.31.0
 gunicorn==22.0.0
 alpaca-trade-api==3.0.2
 pandas>=2.2.0
-numpy==1.24.4
+numpy>=2.0.0
