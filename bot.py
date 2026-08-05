@@ -14,14 +14,11 @@ TELEGRAM_TOKEN   = os.environ["TELEGRAM_TOKEN"]
 TELEGRAM_CHAT_ID = os.environ["TELEGRAM_CHAT_ID"]
 SUPABASE_URL     = os.environ["SUPABASE_URL"]
 SUPABASE_KEY     = os.environ["SUPABASE_KEY"]
-WORKFLOW_TOKEN   = os.environ.get("WORKFLOW_TOKEN", "")
-GITHUB_REPO      = os.environ.get("GITHUB_REPOSITORY", "vidyutk-dev/trading-bot")
 
 RISK_LEVEL       = os.environ.get("RISK_LEVEL", "medium")
 MAX_POSITIONS    = 5        # Increased from 3 — more opportunities
 STOP_LOSS_PCT    = 0.015    # Tighter stop: 1.5%
 TAKE_PROFIT_PCT  = 0.03     # Take profit at 3%
-SLEEP_SECONDS    = 780      # 13 min between runs
 
 # Score thresholds
 STRONG_BUY_SCORE = 80       # Large position
@@ -87,26 +84,9 @@ def log_snapshot(portfolio_value, cash, daily_pnl, open_positions):
         print(f"Supabase snapshot error: {e}")
 
 
-def trigger_next_run():
-    if not WORKFLOW_TOKEN:
-        print("No WORKFLOW_TOKEN — cannot self-schedule.")
-        return
-    print(f"Sleeping {SLEEP_SECONDS // 60} minutes before next run...")
-    time.sleep(SLEEP_SECONDS)
-    now = datetime.now(timezone.utc)
-    if now.weekday() >= 5 or now.hour >= 20:
-        print("Market closed during sleep — stopping chain.")
-        return
-    try:
-        r = requests.post(
-            f"https://api.github.com/repos/{GITHUB_REPO}/actions/workflows/trading_bot.yml/dispatches",
-            headers={"Authorization": f"Bearer {WORKFLOW_TOKEN}",
-                     "Accept": "application/vnd.github.v3+json",
-                     "Content-Type": "application/json"},
-            json={"ref": "main"}, timeout=15)
-        print(f"Next run triggered: {r.status_code}")
-    except Exception as e:
-        print(f"Self-trigger error: {e}")
+# Scheduling is now handled by the /trigger endpoint in dashboard.py
+# (pinged by UptimeRobot every 5 minutes during market hours).
+# No more GitHub Actions self-chaining needed.
 
 
 # ── INDICATORS ────────────────────────────────────────────────────────────────
@@ -426,10 +406,6 @@ def run_bot():
         f"Today's P&L: ${daily_pl:+.2f}\n"
         f"Open positions: {num_open}/{MAX_POSITIONS}\n"
         f"Risk mode: {RISK_LEVEL.upper()}")
-
-    # ── Self-schedule ─────────────────────────────────────────────────────────
-    trigger_next_run()
-
 
 if __name__ == "__main__":
     run_bot()

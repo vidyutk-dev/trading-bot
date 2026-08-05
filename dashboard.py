@@ -3,12 +3,12 @@ import requests
 from flask import Flask, render_template_string, request, jsonify
 from datetime import datetime, timezone
 
+from bot import run_bot
+
 app = Flask(__name__)
 
 SUPABASE_URL    = os.environ["SUPABASE_URL"]
 SUPABASE_KEY    = os.environ["SUPABASE_KEY"]
-WORKFLOW_TOKEN  = os.environ.get("WORKFLOW_TOKEN", "")
-GITHUB_REPO     = os.environ.get("GITHUB_REPOSITORY", "vidyutk-dev/trading-bot")
 TRIGGER_SECRET  = os.environ.get("TRIGGER_SECRET", "")
 
 HEADERS = {
@@ -250,7 +250,7 @@ def index():
 def trigger():
     """
     Called by UptimeRobot every 5 minutes.
-    Only fires the GitHub workflow during market hours (Mon-Fri 13:30-20:00 UTC).
+    Only runs the bot during market hours (Mon-Fri 13:30-20:00 UTC).
     Protected by TRIGGER_SECRET query param.
     """
     # Secret check — UptimeRobot passes X-Trigger-Secret header
@@ -271,24 +271,9 @@ def trigger():
             "weekday": now.weekday()
         })
 
-    if not WORKFLOW_TOKEN:
-        return jsonify({"status": "error", "reason": "no WORKFLOW_TOKEN configured"}), 500
-
     try:
-        r = requests.post(
-            f"https://api.github.com/repos/{GITHUB_REPO}/actions/workflows/trading_bot.yml/dispatches",
-            headers={
-                "Authorization": f"Bearer {WORKFLOW_TOKEN}",
-                "Accept":        "application/vnd.github.v3+json",
-                "Content-Type":  "application/json"
-            },
-            json={"ref": "main"},
-            timeout=15
-        )
-        if r.status_code == 204:
-            return jsonify({"status": "triggered", "time_utc": now.strftime("%H:%M UTC")})
-        else:
-            return jsonify({"status": "github_error", "code": r.status_code, "body": r.text}), 500
+        run_bot()
+        return jsonify({"status": "ok", "time_utc": now.strftime("%H:%M UTC")})
     except Exception as e:
         return jsonify({"status": "error", "reason": str(e)}), 500
 

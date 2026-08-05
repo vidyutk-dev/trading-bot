@@ -29,6 +29,4 @@ jobs:
           RISK_LEVEL:        ${{ secrets.RISK_LEVEL }}
           SUPABASE_URL:      ${{ secrets.SUPABASE_URL }}
           SUPABASE_KEY:      ${{ secrets.SUPABASE_KEY }}
-          WORKFLOW_TOKEN:    ${{ secrets.WORKFLOW_TOKEN }}
-          GITHUB_REPOSITORY: ${{ github.repository }}
         run: python bot.py
